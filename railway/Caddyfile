@@ -1,0 +1,35 @@
+{
+	admin off
+	auto_https off
+	servers {
+		# Railway's edge reaches the container from 100.64.0.0/10 and appends its own
+		# public address (152.233.0.0/17) to X-Forwarded-For. Trusting all three makes
+		# {client_ip} resolve to the real caller and lets the edge's X-Forwarded-Proto
+		# through, which is what gives Django the https scheme.
+		trusted_proxies static 100.64.0.0/10 fd00::/8 152.233.0.0/17
+	}
+}
+
+:{$PORT:8080} {
+	encode gzip
+
+	# collectstatic output, written into the image's own filesystem at boot.
+	handle_path /static/* {
+		root * /home/wger/static
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+
+	# Uploaded and synchronised media, signed and streamed from the managed bucket.
+	handle /media/* {
+		reverse_proxy 127.0.0.1:8081
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:8000 {
+			# Collapse the chain to the real client so django-axes and DRF throttling
+			# bucket per caller rather than per rotating Railway edge address.
+			header_up X-Forwarded-For {client_ip}
+		}
+	}
+}
