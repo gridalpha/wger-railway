@@ -35,11 +35,15 @@ RUN set -eux; \
     chown -R wger:wger /home/wger/railway; \
     caddy version; \
     bash -n /home/wger/railway/entrypoint.sh; \
-    for f in /home/wger/railway/*.py; do python3 -m py_compile "$f"; done; \
-    PORT=8080 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile; \
-    python3 -c "import boto3, psycopg, jwt, cryptography"
+    PORT=8080 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 
 USER wger
 WORKDIR /home/wger/src
+
+# As the runtime user: wger installs its python packages with `pip3 install --user`,
+# so root cannot see them and an import check above would test the wrong interpreter.
+RUN set -eux; \
+    for f in /home/wger/railway/*.py; do python3 -m py_compile "$f"; done; \
+    python3 -c "import boto3, psycopg, jwt, cryptography, gevent"
 
 CMD ["/home/wger/railway/entrypoint.sh"]
